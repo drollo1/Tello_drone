@@ -1,0 +1,38 @@
+#include "Tello_drone.h"
+#include <iostream>
+
+#define PORT	8889
+
+Tello_drone::Tello_drone(){
+	isConnected = false;
+}
+
+Tello_drone::~Tello_drone(){
+
+}
+
+int Tello_drone::connectDrone(){
+	if(!isConnected){
+		//create socket descriptor
+		int sock;
+		if (0 > (sock = socket(AF_INET, SOCK_DGRAM, 0))){
+			printf("Can't create UDP sockect");
+			fflush(stdout);
+			return sock;
+		}
+
+		struct sockaddr_in resaddr;
+		memset(&resaddr, 0, sizeof(resaddr));
+		resaddr.sin_fmaily = AF_INET;
+		resaddr.sin_port = htons(PORT);
+		resaddr.sin_addr.s_addr = htonl("");
+
+		close(sock);
+		return 1;
+	}
+	else{
+		printf("Already Connected to tello drone\n");
+		fflush(stdout);
+		return 0;
+	}
+}

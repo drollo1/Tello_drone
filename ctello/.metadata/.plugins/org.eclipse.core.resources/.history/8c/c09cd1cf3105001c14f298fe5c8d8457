@@ -1,0 +1,48 @@
+#include "../Display/SDL_gfx.h"
+#include "Tello_drone.h"
+#include <opencv2/imgcodecs.hpp>
+
+SDL_gfx* m_display;
+Tello_drone* m_drone;
+
+int update_display(cv::Mat input){
+	m_display->startFrame();
+	m_display->drawBackground(input);
+	m_display->finishFrame();
+}
+
+int main(int argc, char *argv[]){
+
+	// Init SDL
+	int err = SDL_Init(SDL_INIT_EVENTS | SDL_INIT_TIMER);
+	if (err){
+		printf("Could not initialize SDL - %s\n", SDL_GetError());
+		fflush(stdout);
+		exit(1);
+	}
+	// Create frame object
+	m_display = new SDL_gfx();
+
+	m_drone = new Tello_drone();
+	m_drone->connectDrone();
+	m_drone->sendCommand("battery?", strlen("battery?"));
+	m_drone->streamon();
+	cv::Mat frame;
+	bool gotFrame = false;
+	for (int i=0; i<1000; i++){
+		while(!gotFrame)
+			gotFrame = m_drone->getFrame(frame);
+		if (gotFrame)
+			update_display(frame);
+		gotFrame = false;
+		char* buffer;
+		sprintf(buffer, "/home/dom/Desktop/dump/frame_%04d.png", i);
+		cv::imwrite(&buffer, input);
+	}
+	m_drone->streamoff();
+	m_display->close();
+	delete m_display;
+	delete m_drone;
+	SDL_Quit();
+	return(0);
+}

@@ -1,0 +1,22 @@
+#include "Tello_drone.h"
+
+Tello_drone::Tello_drone(){
+
+}
+
+Tello_drone::~Tello_drone(){
+
+}
+
+int Tello_drone::connectDrone(){
+	if(!isConnected)
+	{
+
+	}
+	else
+	{
+		printf("Already Connected to tello drone\n");
+		fflush(stdout);
+		return 0;
+	}
+}

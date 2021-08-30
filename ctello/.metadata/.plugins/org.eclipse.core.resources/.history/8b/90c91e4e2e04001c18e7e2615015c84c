@@ -1,0 +1,12 @@
+#ifdef TELLO_DRONE_H_
+#define TELLO_DRONE_H_
+
+class Tello_drone
+{
+public:
+	Tello_drone();
+	~Tello_drone();
+
+};
+
+#endif // TELLO_DRONE_H_

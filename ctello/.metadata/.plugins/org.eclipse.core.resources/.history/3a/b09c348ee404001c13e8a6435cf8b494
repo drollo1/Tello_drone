@@ -1,0 +1,47 @@
+#include "../Display/SDL_gfx.h"
+#include "Tello_drone.h"
+#include <opencv2/imgcodecs.hpp>
+
+SDL_gfx* m_display;
+Tello_drone* m_drone;
+
+int main(int argc, char *argv[]){
+
+	// Init SDL
+	int err = SDL_Init(SDL_INIT_EVENTS | SDL_INIT_TIMER);
+	if (err){
+		printf("Could not initialize SDL - %s\n", SDL_GetError());
+		fflush(stdout);
+		exit(1);
+	}
+
+//	m_display = new SDL_gfx();
+//	m_display->startFrame();
+//	m_display->drawWhiteBackground();
+
+	cv::Mat frame;
+	m_drone = new Tello_drone();
+	m_drone->connectDrone();
+	m_drone->streamon();
+	bool gotFrame = false;
+	while(!gotFrame)
+		gotFrame = m_drone->getFrame(frame);
+	bool valid = cv::imwrite("/home/dom/Desktop/test.png", frame);
+	if (valid)
+		printf("Valid\n");
+	else
+		printf("Not Valid\n");
+	fflush(stdout);
+	//	m_display->finishFrame();
+	m_drone->streamoff();
+//	m_drone->sendCommand("battery?", strlen("battery?"));
+//	m_drone->sendCommand("takeoff", strlen("takeoff"));
+//	m_drone->sendCommand("cw 360", strlen("cw 360"));
+//	m_drone->sendCommand("land", strlen("land"));
+
+
+//	delete m_display;
+	delete m_drone;
+	SDL_Quit();
+	return(0);
+}

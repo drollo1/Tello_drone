@@ -1,0 +1,15 @@
+#ifndef TELLO_DRONE_H_
+#define TELLO_DRONE_H_
+
+#include "sys/socket.h"
+
+class Tello_drone
+{
+	char m_hostname;
+public:
+	Tello_drone();
+	~Tello_drone();
+	int connectDrone();
+};
+
+#endif // TELLO_DRONE_H_

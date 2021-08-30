@@ -1,0 +1,13 @@
+#include "Tello_drone.h"
+
+Tello_drone::Tello_drone(){
+
+}
+
+Tello_drone::~Tello_drone(){
+
+}
+
+int Tello_drone::connectDrone(){
+	return 1;
+}

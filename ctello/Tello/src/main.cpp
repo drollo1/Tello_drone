@@ -19,6 +19,18 @@ int process_key_press(SDL_KeyboardEvent& event){
 		case SDLK_DOWN:
 		case SDLK_LEFT:
 		case SDLK_RIGHT:
+		case SDLK_w:
+		case SDLK_s:
+		case SDLK_a:
+		case SDLK_d:
+			//TODO: Build rc control message to be sent
+			break;
+		case SDLK_SPACE:
+			m_drone->takeoff();
+			break;
+		case SDLK_LALT:
+			m_drone->land();
+			break;
 		}
 	}
 }
@@ -48,15 +60,14 @@ int main_loop(){
 	cv::Mat frame;
 	bool gotFrame = false;
 	std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
-	int i = 0;
 	while (!m_quit){
 		process_sdl_event();
 		while(!gotFrame)
 			gotFrame = m_drone->getFrame(frame);
+		// Limit  display update to 30fps
 		if (gotFrame && (33333 < std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count())){
 			update_display(frame);
 			start = std::chrono::steady_clock::now();
-			i++;
 		}
 		gotFrame = false;
 	}
@@ -77,7 +88,7 @@ int main(int argc, char *argv[]){
 	// Create drone object
 	m_drone = new Tello_drone();
 	m_drone->connectDrone();
-	m_drone->sendCommand("battery?", strlen("battery?"));
+	m_drone->sendCommand("battery?", strlen("battery?")); // Check battery  //TODO: In future just add this to the screen while flying.
 	m_drone->streamon();
 
 	// Start main loop

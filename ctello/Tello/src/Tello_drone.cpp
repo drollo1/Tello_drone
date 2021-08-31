@@ -8,9 +8,14 @@ Tello_drone::Tello_drone(){
 }
 
 Tello_drone::~Tello_drone(){
+	isConnected = false;
+	m_readThread->join();
 	close(m_cmdSockfd);
 	close(m_statSockfd);
-	isConnected = false;
+	if(isStreaming){
+		isStreaming = false;
+		m_videoThread->join();
+	}
 }
 
 /********************************************************************************************************************
@@ -31,6 +36,8 @@ int Tello_drone::connectDrone(){
 		fflush(stdout);
 		sendCommand("command", strlen("command"));
 		isConnected = true;
+		// Spawn read thread
+		m_readThread = new boost::thread(boost::bind(&Tello_drone::read_thread, this));
 		return 1;
 	}
 	else{
@@ -49,12 +56,6 @@ int Tello_drone::connectDrone(){
 ********************************************************************************************************************/
 int Tello_drone::sendCommand(char* cmd, int len){
 	sendto(m_cmdSockfd, (char*) cmd, len, 0, (sockaddr*)&m_tello_sockaddr, sizeof(m_tello_sockaddr));
-	char buffer[256];
-	socklen_t sock_len;
-	int n = recvfrom(m_cmdSockfd, (char*)buffer, 256, 0, (sockaddr*)&m_tello_sockaddr, &sock_len);
-	buffer[n] = '\0';
-	printf("%s: %s\n", cmd, buffer);
-	fflush(stdout);
 }
 
 /********************************************************************************************************************
@@ -146,5 +147,22 @@ int Tello_drone::video_thread(){
 			m_lastFrame = tmp;
 		}
 		frameValid = isValid;
+	}
+}
+
+int Tello_drone::read_thread(){
+	struct timeval tv;
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+	setsockopt(m_cmdSockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
+	while(isConnected){
+		char buffer[256];
+		socklen_t sock_len;
+		int n = recvfrom(m_cmdSockfd, (char*)buffer, 256, 0, (sockaddr*)&m_tello_sockaddr, &sock_len);
+		if (n > 0){
+			buffer[n] = '\0';
+			printf("%s\n", buffer);
+			fflush(stdout);
+		}
 	}
 }

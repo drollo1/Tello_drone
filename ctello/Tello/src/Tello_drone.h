@@ -44,6 +44,7 @@ public:
 private:
 	int bindSocket(int fd, int port);
 	int video_thread();
+	int read_thread();
 
 private:
 	bool isConnected;
@@ -57,6 +58,7 @@ private:
 	// Frame capture variables
 	bool frameValid;
 	boost::thread* m_videoThread;
+	boost::thread* m_readThread;
 	cv::Mat* m_lastFrame;
 
 //	cv::VideoCapture* m_videoCap;

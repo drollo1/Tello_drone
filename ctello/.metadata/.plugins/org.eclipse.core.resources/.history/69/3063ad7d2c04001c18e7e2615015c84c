@@ -1,4 +1,0 @@
-#ifdef TELLO_DRONE_H_
-#define TELLO_DRONE_H_
-
-#endif // TELLO_DRONE_H_

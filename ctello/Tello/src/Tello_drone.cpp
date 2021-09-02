@@ -8,14 +8,13 @@ Tello_drone::Tello_drone(){
 }
 
 Tello_drone::~Tello_drone(){
+	sendCommand("emergency", strlen("emergency"));
 	isConnected = false;
-	m_readThread->join();
+	if(isStreaming){
+		streamoff();
+	}
 	close(m_cmdSockfd);
 	close(m_statSockfd);
-	if(isStreaming){
-		isStreaming = false;
-		m_videoThread->join();
-	}
 }
 
 /********************************************************************************************************************
@@ -32,12 +31,15 @@ int Tello_drone::connectDrone(){
 		//bind to the stat output for tello drone
 		bindSocket(m_statSockfd, LOCAL_STAT_PORT);
 
-		printf("Sending command...\n");
+		isConnected = true;
+		printf("Sending command...");
 		fflush(stdout);
 		sendCommand("command", strlen("command"));
-		isConnected = true;
-		// Spawn read thread
-		m_readThread = new boost::thread(boost::bind(&Tello_drone::read_thread, this));
+
+		// Get the drone stats as they come in
+		m_statThread = new boost::thread(boost::bind(&Tello_drone::stat_thread, this));
+		m_cmdThread = new boost::thread(boost::bind(&Tello_drone::cmd_thread, this));
+
 		return 1;
 	}
 	else{
@@ -48,27 +50,12 @@ int Tello_drone::connectDrone(){
 }
 
 /********************************************************************************************************************
-*	Sends command to the drone using the command udp socket and waits for response.  The command and the response
-*	are printed out.  This is blocking and has to be rethought for fast
-*	input:
-*		char* cmd: 	The commmand to be sent to the drone
-*		int len:	The length of the command to be sent
-********************************************************************************************************************/
-int Tello_drone::sendCommand(char* cmd, int len){
-	sendto(m_cmdSockfd, (char*) cmd, len, 0, (sockaddr*)&m_tello_sockaddr, sizeof(m_tello_sockaddr));
-}
-
-/********************************************************************************************************************
 *	Prints out the status of the drone.  The drone sends it's status in the format:
 *	“pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy%d;vgz:%d;templ:%d;temph:%d;tof:%d;h:%d;bat:%d;baro:%.2f; time:%d;agx:%.2f;agy:%.2f;agz:%.2f;\r\n”
 ********************************************************************************************************************/
 int Tello_drone::printStatus(){
-	char buffer[256];
-	sockaddr_in tmp;
-	socklen_t sock_len;
-	int n = recvfrom(m_statSockfd, (char*)buffer, 256, 0, (sockaddr*)&tmp, &sock_len);
-	buffer[n] = '\0';
-	printf("Status: %s\n", buffer);
+	boost::unique_lock<boost::mutex> scope_lock(m_statMutex);
+	printf("%s\n", m_status);
 	fflush(stdout);
 }
 
@@ -89,7 +76,7 @@ int Tello_drone::streamoff(){
 ********************************************************************************************************************/
 //TODO: add in boost mutex locking to make sure not overwriting data as it's beeing read.
 bool Tello_drone::getFrame(cv::OutputArray output){
-	if (frameValid){
+	if (frameValid && isStreaming){
 		output.assign(*m_lastFrame);
 		return true;
 	}
@@ -100,15 +87,26 @@ bool Tello_drone::getFrame(cv::OutputArray output){
 int Tello_drone::takeoff(){
 	sendCommand("takeoff", strlen("takeoff"));
 }
+
 int Tello_drone::land(){
 	sendCommand("land", strlen("land"));
+}
+
+int Tello_drone::rc_cmd(int* vals){
+	char buffer[100];
+	sprintf(buffer, "rc %d %d %d %d", vals[0], vals[1], vals[2], vals[3]);
+	sendCommand(buffer, strlen(buffer));
 }
 
 /*
  * Private methods
  */
-
-
+/********************************************************************************************************************
+ *  Binds port to socket file descriptor.
+ *  Input:
+ *  	fd:		Socket file descriptor
+ *  	port:	Number representing port
+********************************************************************************************************************/
 int Tello_drone::bindSocket(int fd, int port){
 	sockaddr_in addr;
 	addr.sin_family = AF_INET;
@@ -121,6 +119,24 @@ int Tello_drone::bindSocket(int fd, int port){
 	}
 	return 1;
 }
+
+/********************************************************************************************************************
+*	Sends command to the drone using the command udp socket and waits for response.  The command and the response
+*	are printed out.  This is blocking and has to be rethought for fast
+*	input:
+*		char* cmd: 	The commmand to be sent to the drone
+*		int len:	The length of the command to be sent
+********************************************************************************************************************/
+int Tello_drone::sendCommand(char* cmd, int len){
+	printf("%s: ", cmd);
+	sendto(m_cmdSockfd, (char*) cmd, len, 0, (sockaddr*)&m_tello_sockaddr, sizeof(m_tello_sockaddr));
+	socklen_t sock_len;
+	char buffer[256];
+	int n = recvfrom(m_cmdSockfd, (char*)buffer, 256, 0, (sockaddr*)&m_tello_sockaddr, &sock_len);
+	buffer[n] = '\0';
+	printf("%s\n", buffer);
+}
+
 /********************************************************************************************************************
 *	This thread is spawned when the streamon method is called.  A capture device just updates frames as fast as the
 *	drone sends them.
@@ -150,19 +166,43 @@ int Tello_drone::video_thread(){
 	}
 }
 
-int Tello_drone::read_thread(){
+/********************************************************************************************************************
+ * 	This thread is spawned to read statistic of the drone as they come in.  Stats are sent in the format of
+ * 	pitch:%d;roll:%d;yaw:%d;vgx:%d;vgy%d;vgz:%d;templ:%d;temph:%d;tof:%d;h:%d;bat:%d;baro:%.2f; time:%d;agx:%.2f;agy:%.2f;agz:%.2f;\r\n
+ ********************************************************************************************************************/
+int Tello_drone::stat_thread(){
+	// Setting up time interval to wait for packet
 	struct timeval tv;
 	tv.tv_sec = 1;
 	tv.tv_usec = 0;
+	char buffer[256];
 	setsockopt(m_cmdSockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv);
 	while(isConnected){
-		char buffer[256];
 		socklen_t sock_len;
-		int n = recvfrom(m_cmdSockfd, (char*)buffer, 256, 0, (sockaddr*)&m_tello_sockaddr, &sock_len);
+		int n = recvfrom(m_statSockfd, (char*)buffer, 256, 0, (sockaddr*)&m_tello_sockaddr, &sock_len);
 		if (n > 0){
+			m_statMutex.lock();
 			buffer[n] = '\0';
-			printf("%s\n", buffer);
-			fflush(stdout);
+			strcpy(m_status, buffer);
+			m_statMutex.unlock();
+		}
+	}
+}
+
+int Tello_drone::cmd_thread(){
+	while(isConnected){
+		if(!m_cmdqueue.empty()){
+			tello_cmd tmp = m_cmdqueue.front();
+			int result = 0;
+			if(TELLO_TAKEOFF == tmp.cmd)
+				result = takeoff();
+			else if(TELLO_LAND == tmp.cmd)
+				result = land();
+			else if (TELLO_RC_CMD == tmp.cmd)
+				result = rc_cmd(tmp.vals);
+
+			if (0 < result)
+				m_cmdqueue.pop();
 		}
 	}
 }

@@ -27,6 +27,17 @@ const int TELLO_VIDEO_PORT = 11111;
 const char* const TELLO_IP = "192.168.10.1";
 const char* const TELLO_UDP_STREAM = "udp://0.0.0.0:11111";
 
+enum cmd_type{
+	TELLO_TAKEOFF,
+	TELLO_LAND,
+	TELLO_RC_CMD
+};
+
+struct tello_cmd{
+	cmd_type cmd;
+	int* vals;
+};
+
 class Tello_drone
 {
 public:
@@ -34,17 +45,20 @@ public:
 	~Tello_drone();
 	int connectDrone();
 	int printStatus();
-	int sendCommand(char* cmd, int len);
 	int streamon();
 	int streamoff();
 	bool getFrame(cv::OutputArray output);
 	int takeoff();
 	int land();
+	std::queue<tello_cmd>* getcmdqueue(){return &m_cmdqueue;}
 
 private:
 	int bindSocket(int fd, int port);
+	int sendCommand(char* cmd, int len);
 	int video_thread();
-	int read_thread();
+	int stat_thread();
+	int cmd_thread();
+	int rc_cmd(int* vals);
 
 private:
 	bool isConnected;
@@ -55,10 +69,18 @@ private:
 	int m_statSockfd;
 	sockaddr_in m_tello_sockaddr;
 
+	// drone commands
+	std::queue<tello_cmd> m_cmdqueue;
+	boost::thread* m_cmdThread;
+
+	//stat variables
+	boost::thread* m_statThread;
+	boost::mutex m_statMutex;
+	char m_status[256];
+
 	// Frame capture variables
 	bool frameValid;
 	boost::thread* m_videoThread;
-	boost::thread* m_readThread;
 	cv::Mat* m_lastFrame;
 
 //	cv::VideoCapture* m_videoCap;
